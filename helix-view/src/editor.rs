@@ -1082,19 +1082,19 @@ impl Editor {
 
     /// Refreshes the language server for a given document
     pub fn refresh_language_servers(&mut self, doc_id: DocumentId) -> Option<()> {
-        if self.config().lsp.enable {
-            let doc = self.documents.get_mut(&doc_id)?;
-            Self::launch_language_servers(&mut self.language_servers, doc)
-        } else {
-            None
-        }
+        self.launch_language_servers(doc_id)
     }
 
     /// Launch a language server for a given document
-    fn launch_language_servers(ls: &mut helix_lsp::Registry, doc: &mut Document) -> Option<()> {
+    fn launch_language_servers(&mut self, doc_id: DocumentId) -> Option<()> {
+        if !self.config().lsp.enable {
+            return None;
+        }
+        let doc = self.documents.get_mut(&doc_id)?;
         // try to find language servers based on the language name
         let language_servers = doc.language.as_ref().and_then(|language| {
-            ls.get(language, doc.path())
+            self.language_servers
+                .get(language, doc.path())
                 .map_err(|e| {
                     log::error!(
                         "Failed to initialize the language servers for `{}` {{ {} }}",
@@ -1324,8 +1324,7 @@ impl Editor {
             doc.set_version_control_head(self.diff_providers.get_current_head_name(&path));
 
             let id = self.new_document(doc);
-            let doc = self.documents.get_mut(&id).unwrap();
-            let _ = Self::launch_language_servers(&mut self.language_servers, doc);
+            self.launch_language_servers(id);
 
             id
         };
