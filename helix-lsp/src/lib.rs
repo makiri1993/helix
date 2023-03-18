@@ -655,19 +655,17 @@ impl Registry {
     ) -> Result<Vec<Arc<Client>>> {
         lang_config
             .language_servers
-            .iter()
-            .filter_map(|config| {
-                let name = config.name().clone();
-
-                #[allow(clippy::map_entry)]
-                if self.inner.contains_key(&name) {
+            .keys()
+            .filter_map(|name| {
+                // #[allow(clippy::map_entry)]
+                if self.inner.contains_key(name) {
                     let client = match self.start_client(name.clone(), &lang_config.roots, doc_path)
                     {
                         Ok(client) => client,
                         error => return Some(error),
                     };
 
-                    let old_client = self.inner.insert(name, client.clone()).unwrap();
+                    let old_client = self.inner.insert(name.clone(), client.clone()).unwrap();
 
                     tokio::spawn(async move {
                         let _ = old_client.force_shutdown().await;
@@ -694,13 +692,12 @@ impl Registry {
     ) -> Result<Vec<Arc<Client>>> {
         lang_config
             .language_servers
-            .iter()
-            .map(|config| match self.inner.get(config.name()) {
+            .keys()
+            .map(|name| match self.inner.get(name) {
                 Some(client) => Ok(client.clone()),
                 None => {
-                    let client =
-                        self.start_client(config.name().clone(), &lang_config.roots, doc_path)?;
-                    self.inner.insert(config.name().clone(), client.clone());
+                    let client = self.start_client(name.clone(), &lang_config.roots, doc_path)?;
+                    self.inner.insert(name.clone(), client.clone());
                     Ok(client)
                 }
             })
