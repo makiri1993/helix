@@ -10,7 +10,9 @@ pub use lsp::{Position, Url};
 pub use lsp_types as lsp;
 
 use futures_util::stream::select_all::SelectAll;
-use helix_core::syntax::{LanguageConfiguration, LanguageServerConfiguration};
+use helix_core::syntax::{
+    LanguageConfiguration, LanguageServerConfiguration, LanguageServerFeatures,
+};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use std::{collections::HashMap, sync::Arc};
@@ -19,7 +21,7 @@ use thiserror::Error;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 pub type Result<T> = core::result::Result<T, Error>;
-type LanguageServerName = String;
+pub type LanguageServerName = String;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -655,8 +657,8 @@ impl Registry {
     ) -> Result<Vec<Arc<Client>>> {
         lang_config
             .language_servers
-            .keys()
-            .filter_map(|name| {
+            .iter()
+            .filter_map(|LanguageServerFeatures { name, .. }| {
                 // #[allow(clippy::map_entry)]
                 if self.inner.contains_key(name) {
                     let client = match self.start_client(name.clone(), &lang_config.roots, doc_path)
@@ -689,16 +691,17 @@ impl Registry {
         &mut self,
         lang_config: &LanguageConfiguration,
         doc_path: Option<&std::path::PathBuf>,
-    ) -> Result<Vec<Arc<Client>>> {
+    ) -> Result<HashMap<LanguageServerName, Arc<Client>>> {
         lang_config
             .language_servers
-            .keys()
-            .map(|name| match self.inner.get(name) {
-                Some(client) => Ok(client.clone()),
+            .iter()
+            .map(|features| match self.inner.get(&features.name) {
+                Some(client) => Ok((features.name.clone(), client.clone())),
                 None => {
-                    let client = self.start_client(name.clone(), &lang_config.roots, doc_path)?;
-                    self.inner.insert(name.clone(), client.clone());
-                    Ok(client)
+                    let client =
+                        self.start_client(features.name.clone(), &lang_config.roots, doc_path)?;
+                    self.inner.insert(features.name.clone(), client.clone());
+                    Ok((features.name.clone(), client))
                 }
             })
             .collect()
