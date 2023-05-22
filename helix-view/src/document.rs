@@ -1165,6 +1165,39 @@ impl Document {
             if emit_lsp_notification {
                 // emit lsp notification
                 for language_server in self.language_servers() {
+                    if language_server.name() == "copilot" {
+                        if let Some(document) = self.copilot_document(language_server) {
+                            let ls = self.language_servers.get("copilot").unwrap().clone();
+                            let copilot_state = self.copilot_state.clone();
+                            let doc_at_req = self.text().clone();
+
+                            tokio::spawn(async move {
+                                let future = match ls.copilot_completion(document) {
+                                    Some(f) => f,
+                                    None => return,
+                                };
+
+                                let response = match future.await {
+                                    Ok(Some(r)) => r,
+                                    _ => return,
+                                };
+
+                                // let transactions =
+                                //     helix_lsp::util::generate_transactions_from_copilot_response(
+                                //         &doc,
+                                //         response,
+                                //         ls.offset_encoding()
+                                // );
+
+                                let mut state = copilot_state.lock();
+                                *state = Some(CopilotState {
+                                    response,
+                                    doc_at_req,
+                                    offset_encoding: ls.offset_encoding(),
+                                });
+                            });
+                        }
+                    }
                     let notify = language_server.text_document_did_change(
                         self.versioned_identifier(),
                         &old_doc,
@@ -1174,40 +1207,6 @@ impl Document {
 
                     if let Some(notify) = notify {
                         tokio::spawn(notify);
-                    }
-                }
-
-                if language_server.name() == "copilot" {
-                    if let Some(document) = self.copilot_document(language_server) {
-                        let ls = self.language_servers.get("copilot").unwrap().clone();
-                        let copilot_state = self.copilot_state.clone();
-                        let doc_at_req = self.text().clone();
-
-                        tokio::spawn(async move {
-                            let future = match ls.copilot_completion(document) {
-                                Some(f) => f,
-                                None => return,
-                            };
-
-                            let response = match future.await {
-                                Ok(Some(r)) => r,
-                                _ => return,
-                            };
-
-                            // let transactions =
-                            //     helix_lsp::util::generate_transactions_from_copilot_response(
-                            //         &doc,
-                            //         response,
-                            //         ls.offset_encoding()
-                            // );
-
-                            let mut state = copilot_state.lock();
-                            *state = Some(CopilotState {
-                                response,
-                                doc_at_req,
-                                offset_encoding: ls.offset_encoding(),
-                            });
-                        });
                     }
                 }
             }
