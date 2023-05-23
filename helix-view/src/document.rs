@@ -1165,6 +1165,17 @@ impl Document {
             if emit_lsp_notification {
                 // emit lsp notification
                 for language_server in self.language_servers() {
+                    let notify = language_server.text_document_did_change(
+                        self.versioned_identifier(),
+                        &old_doc,
+                        self.text(),
+                        changes,
+                    );
+
+                    if let Some(notify) = notify {
+                        tokio::spawn(notify);
+                    }
+
                     if language_server.name() == "copilot" {
                         if let Some(document) = self.copilot_document(language_server) {
                             let ls = self.language_servers.get("copilot").unwrap().clone();
@@ -1197,16 +1208,6 @@ impl Document {
                                 });
                             });
                         }
-                    }
-                    let notify = language_server.text_document_did_change(
-                        self.versioned_identifier(),
-                        &old_doc,
-                        self.text(),
-                        changes,
-                    );
-
-                    if let Some(notify) = notify {
-                        tokio::spawn(notify);
                     }
                 }
             }
